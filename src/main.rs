@@ -375,6 +375,23 @@ fn main()
 
     // allocate framebuffers
 
+    // creates a different framebuffer for each image
+    let mut framebuffers =
+        window_size_dependent_setup(&images, render_pass.clone(), &mut viewport);
+
+    // create a command buffer allocator for managing the buffers
+    let command_buffer_allocator =
+        StandardCommandBufferAllocator::new(device.clone(), Default::default());
+
+
+    // end of vulkan initialization
+
+    // for detecting window resize
+    let mut recreate_swapchain = false;
+
+    // store command submission of previous frame
+    let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
+
 
     event_loop.run(move |event, _, control_flow|
     {
@@ -387,10 +404,43 @@ fn main()
             } => {
                 *control_flow = ControlFlow::Exit;
             },
+            Event::WindowEvent
+            {
+                event: WindowEvent::Resized(_),
+                ..
+            } => {
+                recreate_swapchain = true;
+            }
             Event::RedrawEventsCleared => {
-                let image_extent: [u32; 2] = window.inner_size().into();
             }
             _ => ()
         }
     });
+}
+
+
+fn window_size_dependent_setup(
+    images: &[Arc<Image>],
+    render_pass: Arc<RenderPass>,
+    viewport: &mut Viewport
+) -> Vec<Arc<Framebuffer>>
+{
+    let extent = images[0].extent();
+    viewport.extent = [extent[0] as f32, extent[1] as f32];
+
+    images
+        .iter()
+        .map(|image|
+        {
+            let view = ImageView::new_default(image.clone()).unwrap();
+            Framebuffer::new(
+                render_pass.clone(),
+                FramebufferCreateInfo
+                {
+                    attachments: vec![view],
+                    ..Default::default()
+                }
+            ).unwrap()
+        })
+        .collect::<Vec<_>>()
 }
