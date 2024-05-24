@@ -191,6 +191,191 @@ fn main()
     };
 
 
+    let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+
+
+    // allocate buffers for storing shape
+    #[derive(BufferContents, Vertex)]
+    #[repr(C)]  // force compiler to honor our chosen layout for vertices
+    struct Vertex
+    {
+        #[format(R32G32_SFLOAT)]
+        position: [f32; 2]
+    }
+
+    let vertices = [
+        Vertex
+        {
+            position: [-0.5, -0.25]
+        },
+        Vertex
+        {
+            position: [0.0, 0.5]
+        },
+        Vertex
+        {
+            position: [0.25, -0.1]
+        }
+    ];
+    let vertex_buffer = Buffer::from_iter(
+        memory_allocator,
+        BufferCreateInfo
+        {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo
+        {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        vertices
+    ).unwrap();
+
+
+    // create vertex and fragment shaders
+    mod vs
+    {
+        vulkano_shaders::shader!
+        {
+            ty: "vertex",
+            src: r"
+                #version 450
+
+                layout(location = 0) in vec2 position;
+
+                void main()
+                {
+                    gl_Position = vec4(position, 0.0, 1.0);
+                }
+            "
+        }
+    }
+
+    mod fs
+    {
+        vulkano_shaders::shader!
+        {
+            ty: "fragment",
+            src: r"
+                #version 450
+
+                layout(location = 0) out vec4 f_color;
+
+                void main()
+                {
+                    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+                }
+            "
+        }
+    }
+
+
+    // create render pass - defines image layout and where colors, depth and/or stencil info will
+    // be written
+    let render_pass = vulkano::single_pass_renderpass!(
+        device.clone(),
+        attachments:
+        {
+            // 'color' is name of attachment
+            color:
+            {
+                format: swapchain.image_format(),
+                // 'samples' relates to the coloring of pixels, more samples will give a better
+                // image
+                samples: 1,  // increase to enable antialiasing
+                // clear contents of attachment when drawing begins
+                load_op: Clear,
+                // store output of draw in 'actual' image
+                store_op: Store
+            }
+        },
+        pass:
+        {
+            color: [color],
+            // no depth-stencil
+            depth_stencil: {}
+        }
+    ).unwrap();
+
+
+    // describes how an operation will be performed; in this case, how the program will produce its
+    // graphics
+    let pipeline = {
+        // load shaders (i.e. vertex and fragment shaders defined above)
+        let vs = vs::load(device.clone())
+            .unwrap()
+            .entry_point("main")
+            .unwrap();
+        let fs = fs::load(device.clone())
+            .unwrap()
+            .entry_point("main")
+            .unwrap();
+
+        let vertex_input_state = Vertex::per_vertex()
+            .definition(&vs.info().input_interface)
+            .unwrap();
+
+        // list of shader stages
+        let stages = [
+            PipelineShaderStageCreateInfo::new(vs),
+            PipelineShaderStageCreateInfo::new(fs)
+        ];
+
+        // define pipeline layout - describes locations, types, and pushes constants
+        //
+        // many pipelines can share resources; therefore, it is more efficient to maximize the
+        // resources which are shared between pipelines
+        let layout = PipelineLayout::new(
+            device.clone(),
+            PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+                .into_pipeline_layout_create_info(device.clone())
+                .unwrap()
+        ).unwrap();
+
+        let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+
+        GraphicsPipeline::new(
+            device.clone(),
+            None,
+            GraphicsPipelineCreateInfo
+            {
+                stages: stages.into_iter().collect(),
+                // defines how vertex data is read into the shader from the buffer
+                vertex_input_state: Some(vertex_input_state),
+                // defines arrangement of vertices into primitives - default is a triangle
+                input_assembly_state: Some(InputAssemblyState::default()),
+                // defines transforms and trimming to fit primities into the framebuffer
+                viewport_state: Some(ViewportState::default()),
+                // defines culling of polygons into pixel rasters - default does not cull
+                rasterization_state: Some(RasterizationState::default()),
+                // defines conversion of multiple fragment shaders samples into on pixel value
+                multisample_state: Some(MultisampleState::default()),
+                // defines the combination of existing pixel values with new ones
+                color_blend_state: Some(ColorBlendState::with_attachment_states(
+                    subpass.num_color_attachments(),
+                    ColorBlendAttachmentState::default()
+                )),
+                dynamic_state: [DynamicState::Viewport].into_iter().collect(),
+                subpass: Some(subpass.into()),
+                ..GraphicsPipelineCreateInfo::layout(layout)
+            }
+        ).unwrap()
+    };
+
+
+    let mut viewport = Viewport
+    {
+        offset: [0.0, 0.0],
+        extent: [0.0, 0.0],
+        depth_range: 0.0..=1.0
+    };
+
+
+    // allocate framebuffers
+
+
     event_loop.run(move |event, _, control_flow|
     {
         match event
