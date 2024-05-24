@@ -52,7 +52,7 @@ fn main()
 {
     let event_loop = EventLoop::new();
 
-    // vulkan initialization
+    // initialize vulkan and select a physical device
 
     let library = VulkanLibrary::new().unwrap();
     // get extensions need to draw to the window surface - "window-drawing" functions are not core;
@@ -129,6 +129,66 @@ fn main()
         physical_device.properties().device_name,
         physical_device.properties().device_type
     );
+
+
+    // initialize selected virtual device for interfacing with physical
+    let (device, mut queues) = Device::new(
+        physical_device,
+        DeviceCreateInfo
+        {
+            // features and extensions program needs
+            enabled_extensions: device_extensions,
+            // queues which will be used
+            queue_create_infos: vec![QueueCreateInfo
+            {
+                queue_family_index,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    ).unwrap();
+
+    // collect received queues
+    let queue = queues.next().unwrap();
+
+
+    // allocate swapchain and images
+    //
+    // swapchain holds the space where image data will be written
+    let (mut swapchain, images) = {
+        // get surface's capabilities for swapchain creation
+        let surface_capabilities = device
+            .physical_device()
+            .surface_capabilities(&surface, Default::default())
+            .unwrap();
+
+        // choose image format
+        let image_format = device
+            .physical_device()
+            .surface_formats(&surface, Default::default())
+            .unwrap()[0]
+            .0;
+
+        Swapchain::new(
+            device.clone(),
+            surface,
+            SwapchainCreateInfo
+            {
+                // minimum number of images required by the program - must have at least 2 for
+                // fullscreen
+                min_image_count: surface_capabilities.min_image_count.max(2),
+                image_format,
+                image_extent: window.inner_size().into(),
+                image_usage: ImageUsage::COLOR_ATTACHMENT,
+                composite_alpha: surface_capabilities
+                    .supported_composite_alpha
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+                ..Default::default()
+            }
+        ).unwrap()
+    };
 
 
     event_loop.run(move |event, _, control_flow|
