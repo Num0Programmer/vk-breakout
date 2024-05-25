@@ -412,6 +412,140 @@ fn main()
                 recreate_swapchain = true;
             }
             Event::RedrawEventsCleared => {
+                let image_extent: [u32; 2] = window.inner_size().into();
+
+                // prevent drawing when screen size is 0 - occurs in windowing systems which allows
+                // minimizing windows
+                if image_extent.contains(&0)
+                {
+                    return;
+                }
+
+                // polls 'fences' which determine what has already been processed, and releases
+                // resources
+                previous_frame_end.as_mut().unwrap().cleanup_finished();
+
+                // reallocate swapchain, framebuffers and dynamic state viewport if window has been
+                // resized
+                if recreate_swapchain
+                {
+                    let (new_swapchain, new_images) = swapchain
+                        .recreate(SwapchainCreateInfo
+                        {
+                            image_extent,
+                            ..swapchain.create_info()
+                        })
+                        .expect("Failed to recreate swapchain!");
+
+                    swapchain = new_swapchain;
+
+                    // redirect reference to old swapchain to new swapchain for framebuffers
+                    framebuffers = window_size_dependent_setup(
+                        &new_images,
+                        render_pass.clone(),
+                        &mut viewport
+                    );
+
+                    recreate_swapchain = false;
+                }
+
+                // acquire an image from the swapchain which is ready to be drawn onto
+                let (image_index, suboptimal, acquire_future) =
+                    match acquire_next_image(swapchain.clone(), None).map_err(Validated::unwrap)
+                    {
+                        Ok(r) => r,
+                        Err(VulkanError::OutOfDate) => {
+                            recreate_swapchain = true;
+                            return;
+                        },
+                        Err(e) => panic!("Failed to acquire next image: {e}")
+                    };
+
+                // detect if the acquired image is 'suboptimal' - this can cause the image to not
+                // display as expected for a number of reasons; resized window, for example
+                if suboptimal
+                {
+                    recreate_swapchain = true;
+                }
+
+                // build a command buffer to which commands can be submitted - expensive, but is
+                // expected to be optimized
+                //
+                // command buffers only execute commands within a given queue family
+                let mut builder = AutoCommandBufferBuilder::primary(
+                    &command_buffer_allocator,
+                    queue.queue_family_index(),
+                    CommandBufferUsage::OneTimeSubmit
+                ).unwrap();
+
+                builder
+                    // enter the render pass
+                    .begin_render_pass(
+                        RenderPassBeginInfo
+                        {
+                            // clears the 'color' attachment with a blue color
+                            //
+                            // some attachments provide an 'AttachmentLoadOp::Clear' which can be
+                            // used instead of a custom clear value
+                            clear_values: vec![Some([0.0, 0.0, 1.0, 1.0].into())],
+                            ..RenderPassBeginInfo::framebuffer(
+                                framebuffers[image_index as usize].clone()
+                            )
+                        },
+                        SubpassBeginInfo
+                        {
+                            contents: SubpassContents::Inline,
+                            ..Default::default()
+                        }
+                    )
+                    .unwrap()
+                    .set_viewport(0, [viewport.clone()].into_iter().collect())
+                    .unwrap()
+                    .bind_pipeline_graphics(pipeline.clone())
+                    .unwrap()
+                    .bind_vertex_buffers(0, vertex_buffer.clone())
+                    .unwrap()
+                    // add draw command
+                    .draw(vertex_buffer.len() as u32, 1, 0, 0)
+                    .unwrap()
+                    // leave the render pass
+                    //
+                    // if there are multiple subpasses, then 'next_subpass' can be used to jump to
+                    // the next subpass
+                    .end_render_pass(Default::default())
+                    .unwrap();
+
+                // finishing building command buffer
+                let command_buffer = builder.build().unwrap();
+
+                let future = previous_frame_end
+                    .take()
+                    .unwrap()
+                    .join(acquire_future)
+                    .then_execute(queue.clone(), command_buffer)
+                    .unwrap()
+                    // present the final image with 'then_swapchain_present' - does not
+                    // automatically display the image to the screen, but submits a present command
+                    // to the buffer
+                    .then_swapchain_present(
+                        queue.clone(),
+                        SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_index)
+                    )
+                    .then_signal_fence_and_flush();
+
+                match future.map_err(Validated::unwrap)
+                {
+                    Ok(future) => {
+                        previous_frame_end = Some(future.boxed());
+                    }
+                    Err(VulkanError::OutOfDate) => {
+                        recreate_swapchain = true;
+                        previous_frame_end = Some(sync::now(device.clone()).boxed());
+                    }
+                    Err(e) => {
+                        panic!("Failed to flush future: {e}");
+                    }
+                }
             }
             _ => ()
         }
