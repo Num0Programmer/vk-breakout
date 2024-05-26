@@ -23,7 +23,7 @@ use vulkano::{
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
-            input_assembly::InputAssemblyState,
+            input_assembly::{InputAssemblyState, PrimitiveTopology},
             multisample::MultisampleState,
             rasterization::RasterizationState,
             vertex_input::{Vertex, VertexDefinition},
@@ -208,15 +208,19 @@ fn main()
     let vertices = [
         Vertex
         {
-            position: [-0.5, -0.25]
+            position: [-0.5, -0.5]
         },
         Vertex
         {
-            position: [0.0, 0.5]
+            position: [-0.5, 0.5]
         },
         Vertex
         {
-            position: [0.25, -0.1]
+            position: [0.5, -0.5]
+        },
+        Vertex
+        {
+            position: [0.5, 0.5]
         }
     ];
     let vertex_buffer = Buffer::from_iter(
@@ -349,8 +353,13 @@ fn main()
                 stages: stages.into_iter().collect(),
                 // defines how vertex data is read into the shader from the buffer
                 vertex_input_state: Some(vertex_input_state),
-                // defines arrangement of vertices into primitives - default is a triangle
-                input_assembly_state: Some(InputAssemblyState::default()),
+                // defines arrangement of vertices into primitives - TriangleStrip is used when
+                // there are multiple (2 or more) triangles which share an edge
+                input_assembly_state: Some(InputAssemblyState
+                {
+                    topology: PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                }),
                 // defines transforms and trimming to fit primities into the framebuffer
                 viewport_state: Some(ViewportState::default()),
                 // defines culling of polygons into pixel rasters - default does not cull
