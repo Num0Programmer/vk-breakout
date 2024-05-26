@@ -66,7 +66,8 @@ fn main()
             enabled_extensions: required_extensions,
             ..Default::default()
         }
-    ).unwrap();
+    )
+    .unwrap();
 
 
     // "Arc" provides a succinct way to count references to shared data - Arc is thread safe
@@ -146,7 +147,8 @@ fn main()
             }],
             ..Default::default()
         }
-    ).unwrap();
+    )
+    .unwrap();
 
     // collect received queues
     let queue = queues.next().unwrap();
@@ -231,7 +233,8 @@ fn main()
             ..Default::default()
         },
         vertices
-    ).unwrap();
+    )
+    .unwrap();
 
 
     // create vertex and fragment shaders
@@ -297,7 +300,8 @@ fn main()
             // no depth-stencil
             depth_stencil: {}
         }
-    ).unwrap();
+    )
+    .unwrap();
 
 
     // describes how an operation will be performed; in this case, how the program will produce its
@@ -332,7 +336,8 @@ fn main()
             PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
                 .into_pipeline_layout_create_info(device.clone())
                 .unwrap()
-        ).unwrap();
+        )
+        .unwrap();
 
         let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -476,7 +481,8 @@ fn main()
                     &command_buffer_allocator,
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit
-                ).unwrap();
+                )
+                .unwrap();
 
                 builder
                     // enter the render pass
