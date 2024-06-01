@@ -23,7 +23,7 @@ use vulkano::{
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
-            input_assembly::InputAssemblyState,
+            input_assembly::{InputAssemblyState, PrimitiveTopology},
             multisample::MultisampleState,
             rasterization::RasterizationState,
             vertex_input::{Vertex, VertexDefinition},
@@ -194,46 +194,6 @@ fn main()
     let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
 
 
-    // allocate buffers for storing shape
-    #[derive(BufferContents, Vertex)]
-    #[repr(C)]  // force compiler to honor our chosen layout for vertices
-    struct Vertex
-    {
-        #[format(R32G32_SFLOAT)]
-        position: [f32; 2]
-    }
-
-    let vertices = [
-        Vertex
-        {
-            position: [-0.5, -0.25]
-        },
-        Vertex
-        {
-            position: [0.0, 0.5]
-        },
-        Vertex
-        {
-            position: [0.25, -0.1]
-        }
-    ];
-    let vertex_buffer = Buffer::from_iter(
-        memory_allocator,
-        BufferCreateInfo
-        {
-            usage: BufferUsage::VERTEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo
-        {
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        vertices
-    ).unwrap();
-
-
     // create vertex and fragment shaders
     mod vs
     {
@@ -265,7 +225,7 @@ fn main()
 
                 void main()
                 {
-                    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+                    f_color = vec4(0.0, 0.0, 0.0, 1.0);
                 }
             "
         }
@@ -345,7 +305,11 @@ fn main()
                 // defines how vertex data is read into the shader from the buffer
                 vertex_input_state: Some(vertex_input_state),
                 // defines arrangement of vertices into primitives - default is a triangle
-                input_assembly_state: Some(InputAssemblyState::default()),
+                input_assembly_state: Some(InputAssemblyState
+                {
+                    topology: PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                }),
                 // defines transforms and trimming to fit primities into the framebuffer
                 viewport_state: Some(ViewportState::default()),
                 // defines culling of polygons into pixel rasters - default does not cull
@@ -391,6 +355,51 @@ fn main()
 
     // store command submission of previous frame
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
+
+
+    // game assets
+    // allocate buffers for storing shape
+    #[derive(BufferContents, Clone, Vertex)]
+    #[repr(C)]  // force compiler to honor our chosen layout for vertices
+    struct Vertex
+    {
+        #[format(R32G32_SFLOAT)]
+        position: [f32; 2]
+    }
+
+    let mut ball = [
+        Vertex
+        {
+            position: [-0.01, -0.015]
+        },
+        Vertex
+        {
+            position: [-0.01, 0.015]
+        },
+        Vertex
+        {
+            position: [0.01, -0.015]
+        },
+        Vertex
+        {
+            position: [0.01, 0.015]
+        }
+    ];
+    let vertex_buffer = Buffer::from_iter(
+        memory_allocator.clone(),
+        BufferCreateInfo
+        {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        },
+        AllocationCreateInfo
+        {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        ball.clone()
+    ).unwrap();
 
 
     event_loop.run(move |event, _, control_flow|
@@ -487,7 +496,7 @@ fn main()
                             //
                             // some attachments provide an 'AttachmentLoadOp::Clear' which can be
                             // used instead of a custom clear value
-                            clear_values: vec![Some([0.0, 0.0, 1.0, 1.0].into())],
+                            clear_values: vec![Some([1.0, 1.0, 1.0, 1.0].into())],
                             ..RenderPassBeginInfo::framebuffer(
                                 framebuffers[image_index as usize].clone()
                             )
