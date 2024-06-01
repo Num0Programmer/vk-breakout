@@ -1,4 +1,4 @@
-# vk_breakout
+# vk-breakout
 Breakout written in Rust using Vulkano
 
 ## Installation
